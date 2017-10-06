@@ -91,15 +91,33 @@ class RDT:
             
     
     def rdt_2_1_send(self, msg_S):
+# This is what we will define
+
+#-------------------------------------- FROM THE SLIDES FOR SENDER --------------------------------------
+    #sand packet = make packet ( 0, data, checksum )
+    #udt send ( sand packet )
+    #if rdt_receive(receive packet) and ( corrupt(receive packet) or isNAK( receive packet) ) (?)
+        #then send sand packet again
+    #if rdt_receive(receive packet) and ~corrupt(receive packet) and isACK(receive packet)
+        #then ...
+    #sand packet = make packet ( 1, data, checksum )
+    #udt send (sand packet)
+    #if rdt_receive(receive packet) and ( corrupt(receive packet) or isNAK( receive packet) ) (?)
+        #then send sand packet again
+    #if rdt_receive(receive packet) and ~corrupt(receive packet) and isACK(receive packet)
+        #then ...
         pass
         
     def rdt_2_1_receive(self):
+# This is what we will define
         pass
     
     def rdt_3_0_send(self, msg_S):
+# This is what we will define
         pass
         
     def rdt_3_0_receive(self):
+# This is what we will define
         pass
         
 

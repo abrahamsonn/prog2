@@ -23,7 +23,7 @@ if __name__ == '__main__':
         print('Converting: '+msg_S)
         #rdt.rdt_1_0_send(msg_S)
         rdt.rdt_2_1_send(msg_S)
-       
+		
         # try to receive message before timeout 
         msg_S = None
         while msg_S == None:

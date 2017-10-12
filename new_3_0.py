@@ -1,6 +1,7 @@
 import Network
 import argparse
 from time import sleep
+import time
 import hashlib
 
 
@@ -59,7 +60,8 @@ class RDT:
     ## buffer of bytes read from network
     byte_buffer = '' 
     lastPacketSent = None
-    #NAKLastPacketSent = False
+    start_time = None
+    timeout = 2
 
     def __init__(self, role_S, server_S, port):
         self.network = Network.NetworkLayer(role_S, server_S, port)
@@ -68,30 +70,10 @@ class RDT:
         self.network.disconnect()
         
     def rdt_1_0_send(self, msg_S):
-        p = Packet(self.seq_num, msg_S)
-        self.seq_num += 1
-        self.network.udt_send(p.get_byte_S())
-        
+        pass
+
     def rdt_1_0_receive(self):
-        ret_S = None
-        byte_S = self.network.udt_receive()
-        self.byte_buffer += byte_S
-        #keep extracting packets - if reordered, could get more than one
-        while True:
-            #check if we have received enough bytes
-            if(len(self.byte_buffer) < Packet.length_S_length):
-                return ret_S #not enough bytes to read packet length
-            #extract length of packet
-            length = int(self.byte_buffer[:Packet.length_S_length])
-            if len(self.byte_buffer) < length:
-                return ret_S #not enough bytes to read the whole packet
-            #create packet from buffer content and add to return string
-            p = Packet.from_byte_S(self.byte_buffer[0:length])
-            ret_S = p.msg_S if (ret_S is None) else ret_S + p.msg_S
-            #remove the packet bytes from the buffer
-            self.byte_buffer = self.byte_buffer[length:]
-            #if this was the last packet, will return on the next iteration
-            
+        pass
     
     def rdt_2_1_send(self, msg_S):
         sendPacket = Packet(self.seq_num, msg_S)
@@ -150,19 +132,89 @@ class RDT:
                         #remove the packet bytes from the buffer
                         #if this was the last packet, will return on the next iteration
                     else:
-                        pass
-#if self.seq_num == 0:
-#  self.seq_num = 1
+                        if self.seq_num == 0:
+                            self.seq_num = 1
                     self.rdt_2_1_send("ACK")
                 self.byte_buffer = self.byte_buffer[length:]
 
     def rdt_3_0_send(self, msg_S):
 # This is what we will define
-        pass
+        sendPacket = Packet(self.seq_num, msg_S)
+        if msg_S != "NAK":
+            self.lastPacketSent = sendPacket
+            #NAKLastPacketSent = False
+        if msg_S == "ACK":
+            if self.seq_num == 0:
+                self.seq_num = 1
+
+        self.start_time = time.time()
+        self.network.udt_send(sendPacket.get_byte_S())
+
         
     def rdt_3_0_receive(self):
 # This is what we will define
-        pass
+        print "RDT 3 RECEIVE"
+        ret_S = None
+        byte_S = self.network.udt_receive()
+
+        self.byte_buffer += byte_S
+        #keep extracting packets - if reordered, could get more than one
+        looping = True
+        print "STUCK POINT 0"
+        while looping:
+            #check if we have received enough bytes
+            if(len(self.byte_buffer) < Packet.length_S_length):
+                if self.start_time == None:
+                    return
+                elapsed_time = time.time() - self.start_time 
+                if ( elapsed_time >= self.timeout ):
+                    self.rdt_3_0_send(self.lastPacketSent.msg_S)
+                
+                return ret_S #not enough bytes to read packet length
+
+            print "STUCK POINT 1"
+
+            #extract length of packet
+            length = int(self.byte_buffer[:Packet.length_S_length])
+            if len(self.byte_buffer) < length:
+                return ret_S #not enough bytes to read the whole packet
+            #create packet from buffer content and add to return string
+            if Packet.corrupt(self.byte_buffer[0:length]):
+                self.byte_buffer = self.byte_buffer[length:]
+                self.rdt_3_0_send("NAK")
+                #NAKLastPacketSent = True
+                looping = False
+            else:
+                print "STUCK POINT 2"
+                p = Packet.from_byte_S(self.byte_buffer[0:length])
+
+                if p.msg_S == "NAK":
+                    #if NAKLastPacketSent:
+                    #    self.rdt_3_0_send("NAK")
+                    #else:
+                    if self.lastPacketSent is None:
+                        self.rdt_3_0_send("NAK")
+                    else:
+                        self.rdt_3_0_send(self.lastPacketSent.msg_S)
+                    looping = False
+                elif p.msg_S == "ACK":
+                    if self.seq_num == 0:
+                        self.seq_num = 1
+                    self.lastPacketSent = None
+                    #NAKLastPacketSent = False
+                    looping = False
+                else:
+                    self.lastPacketSent = None
+                    #NAKLastPacketSent = False
+                    if p.seq_num == self.seq_num:
+                        ret_S = p.msg_S if (ret_S is None) else ret_S + p.msg_S
+                        #remove the packet bytes from the buffer
+                        #if this was the last packet, will return on the next iteration
+                    else:
+                        if self.seq_num == 0:
+                            self.seq_num = 1
+                    self.rdt_3_0_send("ACK")
+                self.byte_buffer = self.byte_buffer[length:]
        
 if __name__ == '__main__':
     parser =  argparse.ArgumentParser(description='RDT implementation.')
@@ -174,19 +226,19 @@ if __name__ == '__main__':
     rdt = RDT(args.role, args.server, args.port)
     if args.role == 'client':
         #rdt.rdt_1_0_send('MSG_FROM_CLIENT')
-        rdt.rdt_2_1_send('MSG_FROM_CLIENT')
+        rdt.rdt_3_0_send('MSG_FROM_CLIENT')
         sleep(2)
         #print(rdt.rdt_1_0_receive())
-        print(rdt.rdt_2_1_receive())
+        print(rdt.rdt_3_0_receive())
         rdt.disconnect()
         
         
     else:
         sleep(1)
         #print(rdt.rdt_1_0_receive())
-        print(rdt.rdt_2_1_receive())
+        print(rdt.rdt_3_0_receive())
         #rdt.rdt_1_0_send('MSG_FROM_SERVER')
-        rdt.rdt_2_1_send('MSG_FROM_SERVER')
+        rdt.rdt_3_0_send('MSG_FROM_SERVER')
         rdt.disconnect()
         
 
